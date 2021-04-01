@@ -1,0 +1,6 @@
+bash
+source activate bertenv
+cd C:/Users/20203108/Documents/STRAP/will2do_example/python-classifier-2021
+python3 train_model.py data/ model
+python3 test_model.py model data/ test_outputs
+python3 ../evaluation-2021/evaluate_model.py ../python-classifier-2021/data/ ../python-classifier-2021/test_outputs/ ../evaluation-2021/scores.csv ../evaluation-2021/class_scores.csv
