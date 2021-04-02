@@ -189,4 +189,3 @@ def save_outputs(output_file, classes, labels, probabilities):
         f.write(output_string)
 
 
-x,y = find_challenge_files('./Data/')
