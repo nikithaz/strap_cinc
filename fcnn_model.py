@@ -9,7 +9,7 @@ import tensorflow as tf
 tf.random.set_seed(123)
 import numpy as np
 # tf.compat.v1.disable_eager_execution()
-OPT = tf.keras.optimizers.Adamax(learning_rate=0.01)
+OPT = tf.keras.optimizers.Adamax(learning_rate=1e-3)
 
 def get_model(num_classes): 
     input_layer = tf.keras.layers.Input((None,1))  #min 17
@@ -41,12 +41,12 @@ def get_model_cnc(num_classes):
     x = tf.keras.layers.Conv1D(filters=512,kernel_size=3,strides=1,activation='relu')(x)
     x = tf.keras.layers.MaxPool1D(2)(x)
     x = tf.keras.layers.Conv1D(filters=64,kernel_size=1,strides=1,activation='relu', name = "last")(x)   
-    x = tf.keras.layers.Conv1D(filters=num_classes,kernel_size=1,strides=1,activation='softmax')(x)
+    x = tf.keras.layers.Conv1D(filters=num_classes,kernel_size=1,strides=1)(x)
     x = tf.keras.layers.GlobalAvgPool1D()(x)
-    predictions = tf.keras.layers.Activation(activation='softmax')(x)
+    predictions = tf.keras.layers.Activation(activation='sigmoid')(x)
     model = tf.keras.Model(inputs = input_layer, outputs = predictions)
     print(model.summary())
-    model.compile(optimizer = OPT, loss = 'categorical_crossentropy')
+    model.compile(optimizer = OPT, loss = 'binary_crossentropy')
     return model
 
 
@@ -69,48 +69,69 @@ def get_model_base(num_classes):
     x = tf.keras.layers.Conv1D(filters=16,kernel_size=1,strides=1,activation='relu', name='last')(x)
     
     
-    x = tf.keras.layers.Conv1D(filters=num_classes,kernel_size=1,strides=1,activation='softmax')(x)
+    x = tf.keras.layers.Conv1D(filters=num_classes,kernel_size=1,strides=1)(x)
     x = tf.keras.layers.GlobalMaxPool1D()(x)
     predictions = tf.keras.layers.Activation(activation='softmax')(x)
     
     model = tf.keras.Model(inputs = input_layer, outputs = predictions)
     print(model.summary())
-    model.compile(optimizer = 'adam', loss = 'mse')
+    model.compile(optimizer = OPT, loss = 'mse')
     return model
 
 def get_model_base_2d(num_classes):
-    input_layer = tf.keras.layers.Input((None,None,1))  #min 230
-    x = tf.keras.layers.Conv2D(filters=64,kernel_size=(3,8),strides=1,activation='relu')(input_layer)
+    input_layer = tf.keras.layers.Input((None,None,1))  #min 2200
+    x = tf.keras.layers.Conv2D(filters=64,kernel_size=(2,12),strides=1,activation='relu')(input_layer)
+    x = tf.keras.layers.MaxPool2D(1,4)(x)
+    x = tf.keras.layers.Conv2D(filters=64,kernel_size=(1,8),strides=1,activation='relu')(x)
+    x = tf.keras.layers.MaxPool2D(1,4)(x)
+    x = tf.keras.layers.Conv2D(filters=128,kernel_size=(1,8),strides=1,activation='relu')(x)
     x = tf.keras.layers.MaxPool2D(1,2)(x)
-    x = tf.keras.layers.Conv2D(filters=128,kernel_size=(1,3),strides=1,activation='relu')(x)
+    x = tf.keras.layers.Conv2D(filters=256,kernel_size=(1,4),strides=1,activation='relu')(x)
     x = tf.keras.layers.MaxPool2D(1,2)(x)
-    x = tf.keras.layers.Conv2D(filters=256,kernel_size=(1,3),strides=1,activation='relu')(x)
+    x = tf.keras.layers.Conv2D(filters=512,kernel_size=(1,4),strides=1,activation='relu')(x)
     x = tf.keras.layers.MaxPool2D(1,2)(x)
-    x = tf.keras.layers.Conv2D(filters=512,kernel_size=(1,3),strides=1,activation='relu')(x)
+    x = tf.keras.layers.Conv2D(filters=512,kernel_size=(1,4),strides=1,activation='relu')(x)
     x = tf.keras.layers.MaxPool2D(1,2)(x)
-    
-    x = tf.keras.layers.Conv2D(filters=128,kernel_size=(1,3),strides=1,activation='relu')(x)
+    x = tf.keras.layers.Conv2D(filters=128,kernel_size=(1,4),strides=1,activation='relu')(x)
     x = tf.keras.layers.MaxPool2D(1,2)(x)
-    x = tf.keras.layers.Conv2D(filters=128,kernel_size=(1,2),strides=1,activation='relu')(x)
+    x = tf.keras.layers.Conv2D(filters=218,kernel_size=(1,2),strides=1,activation='relu')(x)
     x = tf.keras.layers.MaxPool2D(1,3)(x)
     
     x = tf.keras.layers.Conv2D(filters=16,kernel_size=1,strides=1,activation='relu', name='last')(x)
     
-    x = tf.keras.layers.Conv2D(filters=num_classes,kernel_size=1,strides=1,activation='softmax')(x)
+    x = tf.keras.layers.Conv2D(filters=num_classes,kernel_size=1,strides=1)(x)
+    x = tf.keras.layers.BatchNormalization()(x)
     x = tf.keras.layers.GlobalMaxPool2D()(x)
+    
     predictions = tf.keras.layers.Activation(activation='softmax')(x)
     
     model = tf.keras.Model(inputs = input_layer, outputs = predictions)
     print(model.summary())
-    model.compile(optimizer = 'adam', loss = 'mse')
+    model.compile(optimizer = OPT, loss = 'binary_crossentropy',metrics = 'accuracy')
     return model
 
 if __name__ == "__main__":
-    model = get_model_cnc(2)
-    signal_samples = [200,300, 500, 900]
+    model_dim = "2D"
+    if model_dim == "1D":
+        classifier_loader = get_model_cnc
+        signal_samples = [200,300, 500, 900]
+    elif model_dim == "2D":
+        classifier_loader = get_model_base_2d
+        signal_samples = [2200]
+    
+    
+    model = classifier_loader(2)
+    
     N = 100
+    
+    
+    
     for sample_size in signal_samples:
-        x = np.random.randn(N,sample_size,1)
+        if model_dim == "1D":
+            x = np.random.randn(N,sample_size,1)
+        elif model_dim == "2D":
+            x = np.random.randn(N,2,sample_size,1)
+            
         y = np.array([[1, 0] if i>0 else [0, 1] for i in np.random.randn(N)])
     
         

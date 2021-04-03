@@ -8,11 +8,18 @@ import numpy as np, os, sys, joblib
 from sklearn.impute import SimpleImputer
 from sklearn.ensemble import RandomForestClassifier
 from fcnn_model import *
+import pdb
+model_dim = "2D"
 twelve_lead_model_filename = '12_lead_model.sav'
 six_lead_model_filename = '6_lead_model.sav'
 three_lead_model_filename = '3_lead_model.sav'
 two_lead_model_filename = '2_lead_model.sav'
-classifier_loader = get_model_cnc
+if model_dim == "1D":
+    classifier_loader = get_model_cnc
+elif model_dim == "2D":
+    classifier_loader = get_model_base_2d
+mat_size = {'1D':2, '2D':3}
+
 ################################################################################
 #
 # Training function
@@ -48,6 +55,7 @@ def training_code(data_directory, model_directory):
     else:
         classes = sorted(classes) # Sort classes alphanumerically otherwise.
     num_classes = len(classes)
+    print(num_classes, classes)
 
     # Extract features and labels from dataset.
     print('Extracting features and labels...')
@@ -56,51 +64,63 @@ def training_code(data_directory, model_directory):
      # One-hot encoding of classes
 
     for i in range(num_recordings):
-        print('    {}/{}...'.format(i+1, num_recordings))
+        try:
+            print('    {}/{}...'.format(i+1, num_recordings))
 
-        # Load header and recording.
-        header = load_header(header_files[i])
-        recording = load_recording(recording_files[i])
-
-        # Get age, sex and root mean square of the leads.
-        # age, sex, sig = get_features(header, recording, twelve_leads)
-        # data[i, 0:12] = rms
-        # data[i, 12] = age
-        # data[i, 13] = sex
-
+            # Load header and recording.
+            header = load_header(header_files[i])
+            recording = load_recording(recording_files[i])
         
+            # Get age, sex and root mean square of the leads.
+            # age, sex, sig = get_features(header, recording, twelve_leads)
+            # data[i, 0:12] = rms
+            # data[i, 12] = age
+            # data[i, 13] = sex
         
-        signal = get_features(header, recording, twelve_leads)
-        feat_shape = signal.shape
-        data = signal
-        if feat_shape[1] not in data_dict.keys():
-            data_dict[feat_shape[1]] = data
-        else:
-            data_dict[feat_shape[1]] = np.concatenate([data_dict[feat_shape[1]], data], axis=0)
-        
-        labels = np.zeros((feat_shape[0], num_classes), dtype=np.bool)
-        current_labels = get_labels(header)
-        for label in current_labels:
-            if label in classes:
-                j = classes.index(label)
-                labels[:, j] = 1
-        if feat_shape[1] not in label_dict.keys():
-            label_dict[feat_shape[1]] = labels
-        else:
-            label_dict[feat_shape[1]] = np.concatenate([label_dict[feat_shape[1]], labels], axis=0)       
-            # len_data += len_feat
-
+            
+            
+            signal = get_features(header, recording, twelve_leads)
+            if model_dim == "2D":
+                signal = np.expand_dims(signal,0)
+            feat_shape = signal.shape
+            data = signal
+            if feat_shape[-1] not in data_dict.keys():
+                data_dict[feat_shape[-1]] = data
+            else:
+                # pdb.set_trace()
+                data_dict[feat_shape[-1]] = np.concatenate([data_dict[feat_shape[-1]], data], axis=0)
+            
+            labels = np.zeros((feat_shape[0], num_classes), dtype=np.bool)
+            current_labels = get_labels(header)
+            for label in current_labels:
+                if label in classes:
+                    j = classes.index(label)
+                    labels[:, j] = 1
+            if feat_shape[-1] not in label_dict.keys():
+                label_dict[feat_shape[-1]] = labels
+            else:
+                label_dict[feat_shape[-1]] = np.concatenate([label_dict[feat_shape[-1]], labels], axis=0)       
+                # len_data += len_feat
+        except Exception as e :
+            
+            print(e)
+            continue
+                
     # Train models.
 
     # Define parameters for random forest classifier.
     n_estimators = 3     # Number of trees in the forest.
     max_leaf_nodes = 100 # Maximum number of leaf nodes in each tree.
     random_state = 0     # Random state; set for reproducibility.
-
+    EPOCHS = 3
+    N = 5000
+    BATCH = 128
     # Train 12-lead ECG model.
     lead_dict = {12:twelve_leads, 6:six_leads, 3:three_leads, 2:two_leads}
     model_file_name_dict = {12:twelve_lead_model_filename, 6: six_lead_model_filename, 3:three_lead_model_filename, 2:two_lead_model_filename}
+    imputer = SimpleImputer()
     for ld in [12,6,3,2]:
+        
         print('Training {}-lead ECG model...'.format(ld))
         leads = lead_dict[ld]
         filename = os.path.join(model_directory, model_file_name_dict[ld])
@@ -108,65 +128,35 @@ def training_code(data_directory, model_directory):
         # features = data#[:, feature_indices]
         classifier = classifier_loader(num_classes = num_classes)
         for length in data_dict.keys():
-            feature_all = data_dict[length]
-            print(len(feature_all)%len(leads))
-            sel_index = [i for i in range(feature_all.shape[0]) if i%12 in feature_indices]
-            feature = feature_all[sel_index,:]
-            imputer = SimpleImputer().fit(feature)
-            feature = imputer.transform(feature)
-            feature = np.expand_dims(feature,2)
-            labels = label_dict[length]
-            labels = labels[sel_index,:]
-            print(feature.shape)
-            classifier.fit(feature, labels)
+            try:
+                feature_all = data_dict[length]
+                print(len(feature_all)%len(leads))
+                sel_index = [i for i in range(feature_all.shape[mat_size[model_dim]-2]) if i%12 in feature_indices]
+                if model_dim == "1D":
+                    feature = feature_all[sel_index,:]
+                elif model_dim == "2D":
+                    feature = feature_all[:,sel_index,:]
+    
+                feature = np.expand_dims(feature,mat_size[model_dim])
+                # feature = feature[:,:N,:]
+                
+                labels = label_dict[length]
+                if model_dim == "1D":
+                    labels = labels[sel_index,:]
+                elif model_dim == "2D":
+                    labels = labels
+                
+                print(feature.shape)
+                # feature[feature==np.nan] = 0
+                
+                
+                classifier.fit(feature, labels, batch_size = BATCH,epochs=EPOCHS)
+            except Exception as e:
+                print(e)
+                continue
     
         save_model(filename, classes, leads, imputer, classifier)
-"""
-    # Train 6-lead ECG model.
-    print('Training 6-lead ECG model...')
 
-    leads = six_leads
-    filename = os.path.join(model_directory, six_lead_model_filename)
-
-    feature_indices = [twelve_leads.index(lead) for lead in leads] + [12, 13]
-    features = data[:, feature_indices]
-
-    imputer = SimpleImputer().fit(features)
-    features = imputer.transform(features)
-    classifier = RandomForestClassifier(n_estimators=n_estimators, max_leaf_nodes=max_leaf_nodes, random_state=random_state).fit(features, labels)
-    save_model(filename, classes, leads, imputer, classifier)
-
-    # Train 3-lead ECG model.
-    print('Training 3-lead ECG model...')
-
-    leads = three_leads
-    filename = os.path.join(model_directory, three_lead_model_filename)
-
-    feature_indices = [twelve_leads.index(lead) for lead in leads] + [12, 13]
-    features = data[:, feature_indices]
-
-    imputer = SimpleImputer().fit(features)
-    features = imputer.transform(features)
-    features = np.array(features)
-    print(features.shape)
-    classifier = get_model_base_2d(num_classes = num_classes).fit(features, labels)
-    # classifier = RandomForestClassifier(n_estimators=n_estimators, max_leaf_nodes=max_leaf_nodes, random_state=random_state).fit(features, labels)
-    save_model(filename, classes, leads, imputer, classifier)
-
-    # Train 2-lead ECG model.
-    print('Training 2-lead ECG model...')
-
-    leads = two_leads
-    filename = os.path.join(model_directory, two_lead_model_filename)
-
-    feature_indices = [twelve_leads.index(lead) for lead in leads] + [12, 13]
-    features = data[:, feature_indices]
-
-    imputer = SimpleImputer().fit(features)
-    features = imputer.transform(features)
-    classifier = RandomForestClassifier(n_estimators=n_estimators, max_leaf_nodes=max_leaf_nodes, random_state=random_state).fit(features, labels)
-    save_model(filename, classes, leads, imputer, classifier)
-"""
 ################################################################################
 #
 # File I/O functions
@@ -265,12 +255,14 @@ def run_model(model, header, recording):
     
     
     signal = get_features(header, recording, leads)
+    if model_dim == "2D":
+        signal = np.expand_dims(signal,0)
     feat_shape = signal.shape
     data = signal
-    if feat_shape[1] not in data_dict.keys():
-        data_dict[feat_shape[1]] = data
+    if feat_shape[-1] not in data_dict.keys():
+        data_dict[feat_shape[-1]] = data
     else:
-        data_dict[feat_shape[1]] = np.concatenate([data_dict[feat_shape[1]], data], axis=0)
+        data_dict[feat_shape[-1]] = np.concatenate([data_dict[feat_shape[-1]], data], axis=0)
     
     lead_dict = {12:twelve_leads, 6:six_leads, 3:three_leads, 2:two_leads}
     model_file_name_dict = {12:twelve_lead_model_filename, 6: six_lead_model_filename, 3:three_lead_model_filename, 2:two_lead_model_filename}
@@ -285,27 +277,34 @@ def run_model(model, header, recording):
     label_array = None
     prob_array = None
     for length in data_dict.keys():
-        feature_all = data_dict[length]
-        print(len(feature_all)%len(leads))
-        sel_index = [i for i in range(feature_all.shape[0]) if i%12 in feature_indices]
-        feature = feature_all[sel_index,:]
-        # feature = imputer.transform(feature)
-        feature = np.expand_dims(feature,2)
-
-        print(feature.shape)
-        labels = classifier.predict(feature)
-        labels = (labels > 0.2 + 0)
-        labels = np.asarray(labels, dtype=np.int)
-        probabilities = classifier.predict(feature)
-        probabilities = np.asarray(probabilities, dtype=np.float32)
-        if label_array is None:
-            label_array = labels
-        else:
-            label_array = np.concatenate([label_array,labels], axis = 0)
-        if prob_array is None:
-            prob_array = probabilities
-        else:
-            prob_array = np.concatenate([prob_array,probabilities], axis = 0)
+        try:
+            feature_all = data_dict[length]
+            print(len(feature_all)%len(leads))
+            sel_index = [i for i in range(feature_all.shape[mat_size[model_dim]-2]) if i%12 in feature_indices]
+            if model_dim == "1D":
+                feature = feature_all[sel_index,:]
+            elif model_dim == "2D":
+                feature = feature_all[:,sel_index,:]
+            # feature = imputer.transform(feature)
+            feature = np.expand_dims(feature,mat_size[model_dim])
+    
+            print(feature.shape)
+            labels = classifier.predict(feature)
+            labels = (labels > 0.2 + 0)
+            labels = np.asarray(labels, dtype=np.int)
+            probabilities = classifier.predict(feature)
+            probabilities = np.asarray(probabilities, dtype=np.float32)
+            if label_array is None:
+                label_array = labels
+            else:
+                label_array = np.concatenate([label_array,labels], axis = 0)
+            if prob_array is None:
+                prob_array = probabilities
+            else:
+                prob_array = np.concatenate([prob_array,probabilities], axis = 0)
+        except Exception as e :
+             print(e)
+             continue
 
     # Impute missing data.
     # features = data.reshape(1, -1)
