@@ -5,6 +5,7 @@ from helper_code import find_challenge_files, get_leads
 import os, sys, argparse
 import numpy as np, scipy as sp
 from scipy.io import loadmat
+# import pdb
 
 # Parse arguments.
 def get_parser():
@@ -27,8 +28,9 @@ def run(args):
         os.mkdir(args.output_directory)
 
     # Identify the full-lead header and recording files.
+    
     full_header_files, full_recording_files = find_challenge_files(args.input_directory)
-
+    # pdb.set_trace()
     # Extract a reduced-lead set from each pair of full-lead header and recording files.
     for full_header_file, full_recording_file in zip(full_header_files, full_recording_files):
         # Load a pair of full-lead header and recording files.

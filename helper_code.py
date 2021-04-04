@@ -7,6 +7,7 @@ import numpy as np, os
 from scipy.io import loadmat
 import wfdb
 
+
 # Define 12, 6, and 2 lead ECG sets.
 twelve_leads = ('I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6')
 twelve_map = {'i':'I', 'ii':'II', 'iii':'III', 'avr':'aVR', 'avl':'aVL', 'avf' :'aVF', 'v1':'V1','v2': 'V2', 'v3':'V3', 'v4':'V4', 'v5':'V5', 'v6':'V6'}
@@ -29,6 +30,8 @@ def is_integer(x):
 
 # Find header and recording files.
 def find_challenge_files(data_directory):
+    # print(data_directory)
+    # pdb.set_trace()
     header_files = list()
     recording_files = list()
     for f in os.listdir(data_directory):

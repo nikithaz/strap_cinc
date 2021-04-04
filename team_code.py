@@ -8,7 +8,7 @@ import numpy as np, os, sys, joblib
 from sklearn.impute import SimpleImputer
 from sklearn.ensemble import RandomForestClassifier
 from fcnn_model import *
-import pdb
+
 model_dim = "2D"
 twelve_lead_model_filename = '12_lead_model.sav'
 six_lead_model_filename = '6_lead_model.sav'
@@ -278,13 +278,13 @@ def run_model(model, header, recording):
     prob_array = None
     for length in data_dict.keys():
         try:
-            feature_all = data_dict[length]
-            print(len(feature_all)%len(leads))
-            sel_index = [i for i in range(feature_all.shape[mat_size[model_dim]-2]) if i%12 in feature_indices]
-            if model_dim == "1D":
-                feature = feature_all[sel_index,:]
-            elif model_dim == "2D":
-                feature = feature_all[:,sel_index,:]
+            feature = data_dict[length]
+            # print(len(feature_all)%len(leads))
+            # sel_index = [i for i in range(feature_all.shape[mat_size[model_dim]-2]) if i%12 in feature_indices]
+            # if model_dim == "1D":
+                # feature = feature_all[sel_index,:]
+            # elif model_dim == "2D":
+                # feature = feature_all[:,sel_index,:]
             # feature = imputer.transform(feature)
             feature = np.expand_dims(feature,mat_size[model_dim])
     
