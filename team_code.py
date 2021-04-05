@@ -2,7 +2,7 @@
 
 # Edit this script to add your team's training code.
 # Some functions are *required*, but you can edit most parts of required functions, remove non-required functions, and add your own function.
-
+# import os
 from helper_code import *
 import numpy as np, os, sys, joblib
 from sklearn.impute import SimpleImputer
@@ -28,10 +28,26 @@ mat_size = {'1D':2, '2D':3}
 
 # Train your model. This function is *required*. Do *not* change the arguments of this function.
 def training_code(data_directory, model_directory):
+    # Define parameters for random forest classifier.
+    n_estimators = 3     # Number of trees in the forest.
+    max_leaf_nodes = 100 # Maximum number of leaf nodes in each tree.
+    random_state = 0     # Random state; set for reproducibility.
+    EPOCHS = 3
+    N = 5000
+    BATCH = 64
+    MEMORY_BATCH = 5000
+    data_dict_list = []
     # Find header and recording files.
-    data_dict = {}
-    label_dict = {}
+    intermediate_path = "temp_extract"
+    if not os.path.exists(intermediate_path):
+        os.makedirs(intermediate_path)
+    
     print('Finding header and recording files...')
+    
+    # Train 12-lead ECG model.
+    lead_dict = {12:twelve_leads, 6:six_leads, 3:three_leads, 2:two_leads}
+    model_file_name_dict = {12:twelve_lead_model_filename, 6: six_lead_model_filename, 3:three_lead_model_filename, 2:two_lead_model_filename}
+    imputer = SimpleImputer()
 
     header_files, recording_files = find_challenge_files(data_directory)
     num_recordings = len(recording_files)
@@ -62,9 +78,16 @@ def training_code(data_directory, model_directory):
 
     # data = np.zeros((num_recordings, 14), dtype=np.float32) # 14 features: one feature for each lead, one feature for age, and one feature for sex
      # One-hot encoding of classes
+    data_dict = None
+    label_dict = None
+    actual_i = 1
 
     for i in range(num_recordings):
         try:
+            
+            if data_dict is None:
+                data_dict = {}
+                label_dict = {}
             print('    {}/{}...'.format(i+1, num_recordings))
 
             # Load header and recording.
@@ -83,6 +106,7 @@ def training_code(data_directory, model_directory):
             if model_dim == "2D":
                 signal = np.expand_dims(signal,0)
             feat_shape = signal.shape
+            print(feat_shape)
             data = signal
             if feat_shape[-1] not in data_dict.keys():
                 data_dict[feat_shape[-1]] = data
@@ -100,25 +124,36 @@ def training_code(data_directory, model_directory):
                 label_dict[feat_shape[-1]] = labels
             else:
                 label_dict[feat_shape[-1]] = np.concatenate([label_dict[feat_shape[-1]], labels], axis=0)       
-                # len_data += len_feat
-        except Exception as e :
             
-            print(e)
+            # import pdb
+            # pdb.set_trace()
+            if actual_i % MEMORY_BATCH == 0 or i==(num_recordings-1):
+                print("writing data to disk...")
+                training_data_dict = {'data_dict':data_dict,'label_dict':label_dict}
+                fname = "training_set_{:09d}.sav".format(actual_i)
+                data_dict_path = os.path.join(intermediate_path,fname)
+                save_dict(training_data_dict, data_dict_path)
+                data_dict_list.append(data_dict_path)
+                data_dict = None
+                label_dict= None
+            actual_i+=1
+                
+                # len_data += len_feat
+        except Exception as e:
+            exception_type, exception_object, exception_traceback = sys.exc_info()
+            filename = exception_traceback.tb_frame.f_code.co_filename
+            line_number = exception_traceback.tb_lineno
+        
+            print("Exception type: ", exception_type)
+            print("File name: ", filename)
+            print("Line number: ", line_number)
             continue
+        
                 
     # Train models.
 
-    # Define parameters for random forest classifier.
-    n_estimators = 3     # Number of trees in the forest.
-    max_leaf_nodes = 100 # Maximum number of leaf nodes in each tree.
-    random_state = 0     # Random state; set for reproducibility.
-    EPOCHS = 3
-    N = 5000
-    BATCH = 128
-    # Train 12-lead ECG model.
-    lead_dict = {12:twelve_leads, 6:six_leads, 3:three_leads, 2:two_leads}
-    model_file_name_dict = {12:twelve_lead_model_filename, 6: six_lead_model_filename, 3:three_lead_model_filename, 2:two_lead_model_filename}
-    imputer = SimpleImputer()
+
+
     for ld in [12,6,3,2]:
         
         print('Training {}-lead ECG model...'.format(ld))
@@ -127,33 +162,44 @@ def training_code(data_directory, model_directory):
         feature_indices = [twelve_leads.index(lead) for lead in leads]
         # features = data#[:, feature_indices]
         classifier = classifier_loader(num_classes = num_classes)
-        for length in data_dict.keys():
-            try:
-                feature_all = data_dict[length]
-                print(len(feature_all)%len(leads))
-                sel_index = [i for i in range(feature_all.shape[mat_size[model_dim]-2]) if i%12 in feature_indices]
-                if model_dim == "1D":
-                    feature = feature_all[sel_index,:]
-                elif model_dim == "2D":
-                    feature = feature_all[:,sel_index,:]
-    
-                feature = np.expand_dims(feature,mat_size[model_dim])
-                # feature = feature[:,:N,:]
-                
-                labels = label_dict[length]
-                if model_dim == "1D":
-                    labels = labels[sel_index,:]
-                elif model_dim == "2D":
-                    labels = labels
-                
-                print(feature.shape)
-                # feature[feature==np.nan] = 0
-                
-                
-                classifier.fit(feature, labels, batch_size = BATCH,epochs=EPOCHS)
-            except Exception as e:
-                print(e)
-                continue
+        for data_dict_path in data_dict_list:
+            if os.path.exists(data_dict_path):
+                training_data_dict = load_dict(data_dict_path)
+                data_dict = training_data_dict['data_dict']
+                label_dict = training_data_dict['label_dict']
+                for length in data_dict.keys():
+                    try:
+                        feature_all = data_dict[length]
+                        print(len(feature_all)%len(leads))
+                        sel_index = [i for i in range(feature_all.shape[mat_size[model_dim]-2]) if i%12 in feature_indices]
+                        if model_dim == "1D":
+                            feature = feature_all[sel_index,:]
+                        elif model_dim == "2D":
+                            feature = feature_all[:,sel_index,:]
+            
+                        feature = np.expand_dims(feature,mat_size[model_dim])
+                        # feature = feature[:,:N,:]
+                        
+                        labels = label_dict[length]
+                        if model_dim == "1D":
+                            labels = labels[sel_index,:]
+                        elif model_dim == "2D":
+                            labels = labels
+                        
+                        print(feature.shape)
+                        # feature[feature==np.nan] = 0
+                        
+                        
+                        classifier.fit(feature, labels, batch_size = BATCH,epochs=EPOCHS)
+                    except Exception as e:
+                        exception_type, exception_object, exception_traceback = sys.exc_info()
+                        filename = exception_traceback.tb_frame.f_code.co_filename
+                        line_number = exception_traceback.tb_lineno
+                    
+                        print("Exception type: ", exception_type)
+                        print("File name: ", filename)
+                        print("Line number: ", line_number)
+                        continue
     
         save_model(filename, classes, leads, imputer, classifier)
 
@@ -162,6 +208,14 @@ def training_code(data_directory, model_directory):
 # File I/O functions
 #
 ################################################################################
+def load_dict(filename):
+    return joblib.load(filename)
+
+def save_dict(d,filename):
+    joblib.dump(d, filename, protocol=0)
+    
+
+
 
 # Save your trained models.
 def save_model(filename, classes, leads, imputer, classifier):
@@ -302,9 +356,15 @@ def run_model(model, header, recording):
                 prob_array = probabilities
             else:
                 prob_array = np.concatenate([prob_array,probabilities], axis = 0)
-        except Exception as e :
-             print(e)
-             continue
+        except Exception as e:
+            exception_type, exception_object, exception_traceback = sys.exc_info()
+            filename = exception_traceback.tb_frame.f_code.co_filename
+            line_number = exception_traceback.tb_lineno
+        
+            print("Exception type: ", exception_type)
+            print("File name: ", filename)
+            print("Line number: ", line_number)
+            continue
 
     # Impute missing data.
     # features = data.reshape(1, -1)
