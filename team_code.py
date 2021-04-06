@@ -34,8 +34,8 @@ def training_code(data_directory, model_directory):
     random_state = 0     # Random state; set for reproducibility.
     EPOCHS = 3
     N = 5000
-    BATCH = 64
-    MEMORY_BATCH = 5000
+    BATCH = 32
+    MEMORY_BATCH = 1000
     data_dict_list = []
     # Find header and recording files.
     intermediate_path = "temp_extract"
