@@ -32,7 +32,7 @@ def training_code(data_directory, model_directory):
     n_estimators = 3     # Number of trees in the forest.
     max_leaf_nodes = 100 # Maximum number of leaf nodes in each tree.
     random_state = 0     # Random state; set for reproducibility.
-    EPOCHS = 3
+    EPOCHS = 22
     N = 5000
     BATCH = 32
     MEMORY_BATCH = 1000
