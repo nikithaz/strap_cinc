@@ -86,6 +86,10 @@ def get_model_base_2d(num_classes):
     x = tf.keras.layers.MaxPool2D(1,4)(x)
     x = tf.keras.layers.Conv2D(filters=128,kernel_size=(1,8),strides=1,activation='relu')(x)
     x = tf.keras.layers.MaxPool2D(1,2)(x)
+    x = tf.keras.layers.Conv2D(filters=128,kernel_size=(1,8),strides=1,activation='relu')(x)
+    x = tf.keras.layers.MaxPool2D(1,2)(x)
+    x = tf.keras.layers.Conv2D(filters=256,kernel_size=(1,4),strides=1,activation='relu')(x)
+    x = tf.keras.layers.MaxPool2D(1,2)(x)
     x = tf.keras.layers.Conv2D(filters=256,kernel_size=(1,4),strides=1,activation='relu')(x)
     x = tf.keras.layers.MaxPool2D(1,2)(x)
     x = tf.keras.layers.Conv2D(filters=512,kernel_size=(1,4),strides=1,activation='relu')(x)
@@ -107,7 +111,7 @@ def get_model_base_2d(num_classes):
     
     model = tf.keras.Model(inputs = input_layer, outputs = predictions)
     print(model.summary())
-    model.compile(optimizer = OPT, loss = 'binary_crossentropy',metrics = 'accuracy')
+    model.compile(optimizer = OPT, loss = 'categorical_crossentropy',metrics = 'accuracy')
     return model
 
 if __name__ == "__main__":
